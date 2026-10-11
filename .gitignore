@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output (electron-builder) — the installer stays local
+dist/
+
+# Regenerable / downloaded data
+eng.traineddata
+harness.generated.html
+
+# Scratch logs & test artifacts
+*.log
+ocr_test.err
+ocr_test.json
+ocr_test2.json
+paddle_test.err
+paddle_test.json
+paddle_paste.json
+
+# Internal tooling
+.freebuff/
+
+# OS noise
+Thumbs.db
+.DS_Store

@@ -1,0 +1,499 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --accent: #0a84ff;
+    --accent-grad: linear-gradient(180deg, #1d9bff 0%, #0a84ff 100%);
+    --glass-bg: rgba(30, 30, 32, 0.78);
+    --glass-brd: rgba(255, 255, 255, 0.14);
+    --txt: rgba(255, 255, 255, 0.92);
+    --txt-2: rgba(255, 255, 255, 0.55);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+            "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  }
+
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; cursor: crosshair; font-family: var(--font); }
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; }
+
+  /* ---------------- word boxes + marquee ---------------- */
+  #layer { position: fixed; inset: 0; }
+  .w {
+    position: absolute; box-sizing: border-box;
+    border: 1px dashed #4aa3ff; border-radius: 3px;
+    transition: background-color .1s ease, border-color .1s ease;
+  }
+  .w.hit    { background: rgba(10, 132, 255, 0.30); border-color: rgba(10, 132, 255, 0.70); }
+  .w.chipped{ background: rgba(10, 132, 255, 0.45); border-color: #0a84ff; }
+  #sel {
+    position: absolute; display: none; border-radius: 2px;
+    border: 1px solid rgba(10, 132, 255, 0.9);
+    background: rgba(10, 132, 255, 0.16);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+  }
+
+  /* ---------------- shared chrome ---------------- */
+  #caption, #bottom, #ocr-hint { -webkit-user-select: none; user-select: none; cursor: default; }
+  /* Panels are draggable from their non-button surface. */
+  #caption, #bottom { cursor: grab; }
+  #caption.dragging, #bottom.dragging { cursor: grabbing; }
+  .glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--glass-brd);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass { background: rgba(28, 28, 30, 0.94); }
+  }
+
+  kbd.k {
+    display: inline-block; min-width: 18px; padding: 2px 6px; border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.7); font: 600 10.5px/1.2 var(--font);
+    text-align: center; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 13px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: var(--txt); font: 500 12px/1 var(--font); cursor: pointer;
+    transition: background .15s ease, transform .1s ease, filter .15s ease;
+  }
+  .btn:hover  { background: rgba(255, 255, 255, 0.16); }
+  .btn:active { transform: scale(0.96); }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; background: rgba(255, 255, 255, 0.09); }
+  .btn.primary {
+    background: var(--accent-grad); border-color: rgba(255, 255, 255, 0.18);
+    color: #fff; font-weight: 600;
+    box-shadow: 0 3px 14px rgba(10, 132, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  .btn.primary:hover { filter: brightness(1.08); background: var(--accent-grad); }
+
+  /* ---------------- top toolbar (floating capsule) ---------------- */
+  #caption {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; padding: 6px;
+    border-radius: 999px; z-index: 5; pointer-events: auto;
+    animation: dropIn .28s cubic-bezier(.22, 1, .36, 1);
+  }
+  .ttl { padding: 0 6px 0 10px; color: var(--txt-2); font: 600 11.5px/1 var(--font); letter-spacing: .04em; text-transform: uppercase; }
+
+  /* macOS-style segmented control for Single / Multi */
+  .seg {
+    position: relative; display: flex; padding: 2px; border: none;
+    border-radius: 999px; background: rgba(118, 118, 128, 0.32);
+    font: 500 12px/1 var(--font); cursor: pointer;
+  }
+  .seg:disabled { cursor: default; }
+  .seg .seg-opt {
+    position: relative; z-index: 1; box-sizing: border-box;
+    width: 74px; padding: 5px 0; border-radius: 999px;
+    text-align: center; white-space: nowrap; color: var(--txt-2);
+    transition: color .15s ease;
+  }
+  .seg .seg-opt.on { color: #1c1c1e; font-weight: 600; }
+  .seg .seg-thumb {
+    position: absolute; top: 2px; left: 2px; width: 74px; height: calc(100% - 4px);
+    border-radius: 999px; background: linear-gradient(180deg, #ffffff, #e9e9ec);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    transition: transform .18s cubic-bezier(.22, 1, .36, 1);
+  }
+  .seg.is-multi .seg-thumb { transform: translateX(74px); }
+  #mode-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+  /* ---------------- bottom chip card ---------------- */
+  /* Shrink-to-fit floating card (bottom-left). Anchoring only `left` (no
+     `right`) lets it hug its content instead of stretching edge-to-edge;
+     max-width keeps it from getting absurdly wide on long selections. */
+  #bottom {
+    position: fixed; left: 14px; bottom: 14px;
+    max-width: min(560px, calc(100vw - 28px));
+    display: none; flex-direction: column;
+    border-radius: var(--radius-lg, 18px); overflow: hidden;
+    z-index: 5; pointer-events: auto;
+    animation: riseIn .24s cubic-bezier(.22, 1, .36, 1);
+  }
+  #chips {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px; min-height: 0; max-height: 40vh; overflow: auto;
+    min-width: 0;
+  }
+  #chips::-webkit-scrollbar { width: 8px; }
+  #chips::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); border-radius: 4px; }
+  #chips::-webkit-scrollbar-track { background: transparent; }
+
+  .chip {
+    display: flex; align-items: flex-start; gap: 9px;
+    padding: 7px 9px 7px 11px;
+    background: rgba(10, 132, 255, 0.14);
+    border: 1px solid rgba(10, 132, 255, 0.30);
+    border-radius: 12px; color: var(--txt); font-size: 12.5px; line-height: 1.45;
+    animation: riseIn .18s cubic-bezier(.22, 1, .36, 1);
+  }
+  .chip .idx {
+    flex: none; min-width: 17px; height: 17px; border-radius: 50%;
+    background: #0a84ff; color: #fff; font: 700 10px/17px var(--font);
+    text-align: center; margin-top: 1px;
+  }
+  .chip .txt { flex: 1; white-space: pre-wrap; word-break: break-word; }
+  .chip .x {
+    flex: none; width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%;
+    background: transparent; color: rgba(255, 255, 255, 0.55);
+    font-size: 11px; line-height: 1; cursor: pointer; opacity: 0.65;
+    transition: opacity .15s ease, background .15s ease, color .15s ease;
+  }
+  .chip .x:hover { opacity: 1; background: #ef5350; color: #fff; }
+
+  #copybar {
+    display: flex; gap: 10px; align-items: center;
+    padding: 9px 10px 10px; border-top: 1px solid rgba(255, 255, 255, 0.10);
+  }
+  #copy-count { margin-left: auto; color: var(--txt-2); font: 500 12px/1 var(--font); }
+  #copy-count.is-flash { color: #32d74b; }
+
+  /* ---------------- reading-text HUD ---------------- */
+  #ocr-hint {
+    position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%);
+    display: none; align-items: center; gap: 10px;
+    padding: 11px 18px; border-radius: 999px;
+    color: rgba(255, 255, 255, 0.85); font: 500 13px/1 var(--font);
+    pointer-events: none; z-index: 4;
+  }
+  .spin {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+
+  /* ---------------- motion ---------------- */
+  @keyframes dropIn { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin   { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #caption, #bottom, .chip { animation: none; }
+    .spin { animation-duration: 1.6s; }
+  }
+</style>
+</head>
+<body>
+<img id="bg">
+<div id="layer"></div>
+<div id="sel"></div>
+
+<div id="ocr-hint" class="glass"><span class="spin"></span>Reading text&hellip;</div>
+
+<div id="caption" class="glass">
+  <span class="ttl">Lens</span>
+  <button id="mode-btn" class="seg" type="button" title="Single: drag copies and closes. Multi: drag collects chips for one combined copy.">
+    <span class="seg-thumb" aria-hidden="true"></span>
+    <span class="seg-opt on">Single</span>
+    <span class="seg-opt">Multi</span>
+    <span id="mode-label">Single</span>
+  </button>
+  <button id="scroll-btn" class="btn" type="button" title="Hide the overlay so you can scroll the page underneath, then press Ctrl+Shift+X to capture the new view. Collected chips are kept.">
+    Scroll page <kbd class="k">S</kbd>
+  </button>
+  <button id="cancel-btn" class="btn" type="button" title="Discard this capture">
+    Cancel <kbd class="k">Esc</kbd>
+  </button>
+</div>
+
+<div id="bottom" class="glass" style="display:none;">
+  <div id="chips"></div>
+  <div id="copybar">
+    <button id="copy-btn" class="btn primary" type="button">Copy All</button>
+    <kbd class="k" title="Keyboard shortcut">&#9166;</kbd>
+    <span id="copy-count"></span>
+  </div>
+</div>
+
+<script>
+  const sel = document.getElementById('sel');
+  const layer = document.getElementById('layer');
+  let words = [];
+  let start = null;
+  let dragMoved = false;
+  let multiMode = false;
+  // Each chip remembers the word objects it collected, so their highlight can
+  // be cleared if the chip is removed and so later drags don't re-chip them.
+  let chips = []; // { text, words: [word, ...] }
+
+  const modeBtn = document.getElementById('mode-btn');
+  const modeLabel = document.getElementById('mode-label');
+  const segOpts = modeBtn.querySelectorAll('.seg-opt');
+  const copyBtn = document.getElementById('copy-btn');
+  const copyCount = document.getElementById('copy-count');
+  const chipsEl = document.getElementById('chips');
+  const bottomEl = document.getElementById('bottom');
+  const cancelBtn = document.getElementById('cancel-btn');
+  const scrollBtn = document.getElementById('scroll-btn');
+
+  function renderChips() {
+    chipsEl.innerHTML = '';
+    bottomEl.style.display = chips.length ? 'flex' : 'none';
+    copyCount.textContent = chips.length ? chips.length + ' selected' : '';
+    // Lock the mode switch while selections are pending: flipping to Single
+    // with chips collected would let the next drag silently discard them.
+    modeBtn.disabled = chips.length > 0;
+    modeBtn.style.opacity = chips.length > 0 ? '0.45' : '1';
+    chips.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'chip';
+      const num = document.createElement('span');
+      num.className = 'idx';
+      num.textContent = (i + 1);
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      txt.textContent = c.text;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'x';
+      x.textContent = '\u2715';
+      x.title = 'Remove this selection';
+      x.onclick = () => {
+        const chip = chips.splice(i, 1)[0];
+        (chip.words || []).forEach(w => {
+          w.chipped = false;
+          if (w.el) {
+            w.el.classList.remove('chipped');
+            w.el.classList.toggle('hit', !!w.dragging);
+          }
+        });
+        renderChips();
+      };
+      row.appendChild(num);
+      row.appendChild(txt);
+      row.appendChild(x);
+      chipsEl.appendChild(row);
+    });
+  }
+
+  function setMode(m) {
+    multiMode = !!m;
+    modeLabel.textContent = multiMode ? 'Multi' : 'Single';
+    modeBtn.classList.toggle('is-multi', multiMode);
+    segOpts[0].classList.toggle('on', !multiMode);
+    segOpts[1].classList.toggle('on', multiMode);
+  }
+
+  modeBtn.addEventListener('click', () => {
+    if (modeBtn.disabled) return;
+    setMode(!multiMode);
+    // Tell main so the next capture opens in the same mode.
+    window.api.setMode(multiMode);
+  });
+
+  function copyAllNow() {
+    if (!chips.length) return;
+    copyBtn.textContent = '\u2713 Copied';
+    copyCount.classList.add('is-flash');
+    window.api.copyAll(chips.map(c => c.text).join('\n'));
+  }
+
+  copyBtn.addEventListener('click', copyAllNow);
+
+  cancelBtn.addEventListener('click', () => window.api.cancel());
+
+  // Hide the overlay so the user can scroll the real page underneath; main
+  // swaps in a fresh screenshot when they press Ctrl+Shift+X again. Chips are
+  // renderer state and survive the new 'init'.
+  function enterScrollMode() {
+    window.api.scroll();
+  }
+  scrollBtn.addEventListener('click', enterScrollMode);
+
+  function renderBoxes(ws) {
+    layer.innerHTML = '';
+    const hint = document.getElementById('ocr-hint');
+    if (hint) hint.style.display = ws.length ? 'none' : 'flex';
+    ws.forEach(w => {
+      const d = document.createElement('div');
+      d.className = 'w';
+      // w.* are fractions of the capture; #bg is stretched to 100% of the
+      // viewport, so percentages of the viewport == positions in the image.
+      Object.assign(d.style, {
+        left: (w.x0 * 100) + '%',
+        top: (w.y0 * 100) + '%',
+        width: ((w.x1 - w.x0) * 100) + '%',
+        height: ((w.y1 - w.y0) * 100) + '%',
+      });
+      layer.appendChild(d);
+      w.el = d;
+    });
+    words = ws;
+  }
+
+  // init may arrive with empty words: the screenshot opens instantly and
+  // boxes are painted by a later 'boxes' event once OCR finishes. Re-init
+  // after a scroll-mode recapture keeps `chips` untouched on purpose - only
+  // the background image and word boxes are replaced.
+  window.api.onInit(({ image, words: ws }) => {
+    document.getElementById('bg').src = image;
+    renderBoxes(ws || []);
+  });
+
+  window.api.onBoxes(ws => {
+    renderBoxes(ws || []);
+    // OCR finished either way - never leave "Reading text..." stuck on screen.
+    document.getElementById('ocr-hint').style.display = 'none';
+  });
+
+  // main pushes the persisted mode (Single/Multi) right after init.
+  window.api.onMode(m => setMode(m));
+
+  function rect(e) {
+    return {
+      x0: Math.min(start.x, e.clientX), y0: Math.min(start.y, e.clientY),
+      x1: Math.max(start.x, e.clientX), y1: Math.max(start.y, e.clientY),
+    };
+  }
+
+  // Compare in viewport-fraction space: the drag rect is converted from CSS
+  // pixels by the current viewport size, matching how boxes are placed.
+  function update(e) {
+    const r = rect(e);
+    const vw = innerWidth || 1, vh = innerHeight || 1;
+    Object.assign(sel.style, {
+      left: r.x0 + 'px', top: r.y0 + 'px',
+      width: (r.x1 - r.x0) + 'px', height: (r.y1 - r.y0) + 'px',
+    });
+    const fx0 = r.x0 / vw, fx1 = r.x1 / vw, fy0 = r.y0 / vh, fy1 = r.y1 / vh;
+    words.forEach(w => {
+      w.dragging = !(w.x1 < fx0 || w.x0 > fx1 || w.y1 < fy0 || w.y0 > fy1);
+      // Words already collected into a chip stay highlighted across drags.
+      w.el.classList.toggle('hit', w.dragging || w.chipped);
+    });
+  }
+
+  function pickText(hits) {
+    hits = hits.slice().sort((a, b) => a.line - b.line || a.x0 - b.x0);
+    let out = '', prev = null;
+    for (const w of hits) {
+      if (prev) out += w.line !== prev.line ? '\n' : ' ';
+      out += w.text;
+      prev = w;
+    }
+    return out;
+  }
+
+  addEventListener('mousedown', e => {
+    // Buttons are UI chrome: clicking one must never start a text selection.
+    // Without this guard, pressing the mode toggle fired done('') and main
+    // closed the overlay immediately - multi-select appeared "broken".
+    if (e.target && e.target.closest && e.target.closest('button')) return;
+    start = { x: e.clientX, y: e.clientY };
+    dragMoved = false;
+    sel.style.display = 'block';
+    update(e);
+  });
+
+  addEventListener('mousemove', e => {
+    if (!start) return;
+    if (Math.abs(e.clientX - start.x) > 3 || Math.abs(e.clientY - start.y) > 3) dragMoved = true;
+    update(e);
+  });
+
+  addEventListener('mouseup', e => {
+    if (!start) return;
+    // A click (not a drag) on the top/bottom chrome bars is a UI interaction,
+    // not a selection: ignore it instead of copying/closing the overlay.
+    if (!dragMoved && e.target && e.target.closest &&
+        e.target.closest('#caption, #bottom')) {
+      start = null;
+      sel.style.display = 'none';
+      return;
+    }
+    update(e);
+    const hits = words.filter(w => w.dragging);
+    start = null;
+    sel.style.display = 'none';
+    // Ignore selections made before OCR finished - closing with empty text
+    // would silently discard the user's drag.
+    if (!words.length) return;
+    if (multiMode) {
+      if (!hits.length) return;
+      const text = pickText(hits);
+      hits.forEach(w => {
+        w.chipped = true;
+        if (w.el) {
+          w.el.classList.add('hit');
+          w.el.classList.add('chipped');
+        }
+      });
+      chips.push({ text, words: hits });
+      renderChips();
+    } else {
+      window.api.done(pickText(hits));
+    }
+  });
+
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape') window.api.cancel();
+    // S: scroll mode (hide overlay, scroll, Ctrl+Shift+X to recapture).
+    else if (e.key === 's' || e.key === 'S') enterScrollMode();
+    // Enter: copy all collected chips.
+    else if (e.key === 'Enter') copyAllNow();
+  });
+
+  // ---- draggable panels -------------------------------------------------
+  // Let the user drag the toolbar (#caption) and the chip card (#bottom)
+  // anywhere on screen so they don't cover the text they want to select.
+  // Buttons inside still work (drag is skipped for them); dragging does NOT
+  // start a text selection.
+  const drag = { el: null, ox: 0, oy: 0 };
+
+  function beginDrag(panel, e) {
+    const r = panel.getBoundingClientRect();
+    drag.el = panel;
+    drag.ox = e.clientX - r.left;
+    drag.oy = e.clientY - r.top;
+    // Pin to explicit pixel coords (overriding the CSS centering / edge
+    // anchoring) so we can move the panel freely from here on. Lock the
+    // measured WIDTH too: a full-width panel (left+right anchored) would
+    // otherwise collapse to content width the moment right -> auto. Height
+    // stays auto so the chip card can still grow as chips are added.
+    Object.assign(panel.style, {
+      left: r.left + 'px', top: r.top + 'px',
+      width: r.width + 'px',
+      right: 'auto', bottom: 'auto', transform: 'none',
+    });
+    panel.classList.add('dragging');
+  }
+
+  function attachDrag(panel) {
+    panel.addEventListener('mousedown', e => {
+      // Buttons keep their normal click behavior; never drag from them.
+      if (e.target.closest('button')) return;
+      e.preventDefault();   // no native text/image selection while dragging
+      e.stopPropagation(); // don't let the body handler start a box selection
+      beginDrag(panel, e);
+    });
+  }
+  attachDrag(document.getElementById('caption'));
+  attachDrag(document.getElementById('bottom'));
+
+  // Clamp inside the viewport so a panel can't be dragged off-screen/lost.
+  addEventListener('mousemove', e => {
+    if (!drag.el) return;
+    const r = drag.el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - drag.ox, innerWidth - r.width));
+    const y = Math.max(0, Math.min(e.clientY - drag.oy, innerHeight - r.height));
+    drag.el.style.left = x + 'px';
+    drag.el.style.top = y + 'px';
+  });
+
+  addEventListener('mouseup', () => {
+    if (drag.el) drag.el.classList.remove('dragging');
+    drag.el = null;
+  });
+
+  renderChips();
+</script>
+</body>
+</html>
