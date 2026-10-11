@@ -118,8 +118,3 @@ When a capture is triggered:
    - **Step 3**: If neither is available, falls back to `tesseract.js` worker.
 4. Word bounding boxes are normalized to fractional coordinates (`0.0` - `1.0`) and clustered into reading rows, sent to `overlay.html` to enable precision snapping and drag selection.
 
----
-
-## 📄 License
-
-ISC License. See [LICENSE](LICENSE) for details.
